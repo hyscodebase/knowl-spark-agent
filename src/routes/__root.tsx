@@ -1,6 +1,8 @@
 import { Outlet, Link, createRootRoute, HeadContent, Scripts } from "@tanstack/react-router";
 
 import appCss from "../styles.css?url";
+import { AuthProvider } from "@/lib/auth";
+import { Toaster } from "@/components/ui/sonner";
 
 function NotFoundComponent() {
   return (
@@ -29,11 +31,18 @@ export const Route = createRootRoute({
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Lovable App" },
-      { name: "description", content: "Lovable Generated Project" },
-      { name: "author", content: "Lovable" },
-      { property: "og:title", content: "Lovable App" },
-      { property: "og:description", content: "Lovable Generated Project" },
+      { title: "Smart Local Knowledge Agent | 로컬 문서 지식 에이전트" },
+      {
+        name: "description",
+        content:
+          "PDF, DOCX, PPTX, TXT 문서를 업로드하고 멀티 에이전트 RAG 파이프라인으로 의미 기반 검색과 근거 있는 답변을 받으세요.",
+      },
+      { name: "author", content: "Smart Knowledge Agent" },
+      { property: "og:title", content: "Smart Local Knowledge Agent" },
+      {
+        property: "og:description",
+        content: "로컬 문서를 위한 멀티 에이전트 RAG 시스템.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
       { name: "twitter:site", content: "@Lovable" },
@@ -65,5 +74,10 @@ function RootShell({ children }: { children: React.ReactNode }) {
 }
 
 function RootComponent() {
-  return <Outlet />;
+  return (
+    <AuthProvider>
+      <Outlet />
+      <Toaster richColors position="top-center" />
+    </AuthProvider>
+  );
 }
