@@ -1,6 +1,6 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState, useCallback } from "react";
-import { Brain, LogOut } from "lucide-react";
+import { Brain, LogOut, FolderCog } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/integrations/supabase/client";
@@ -93,6 +93,12 @@ function Index() {
             <span className="hidden text-xs text-muted-foreground sm:inline">
               {user.email}
             </span>
+            <Button variant="ghost" size="sm" asChild>
+              <Link to="/documents">
+                <FolderCog className="mr-1.5 h-4 w-4" />
+                문서 관리
+              </Link>
+            </Button>
             <Button variant="ghost" size="sm" onClick={signOut}>
               <LogOut className="mr-1.5 h-4 w-4" />
               로그아웃
