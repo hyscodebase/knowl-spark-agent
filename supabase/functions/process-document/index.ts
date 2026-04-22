@@ -4,8 +4,8 @@
 // 에이전트 3: 임베딩 에이전트 — 텍스트를 청크로 나누고 벡터를 생성
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
-import * as pdfjsLib from "https://esm.sh/pdfjs-dist@4.0.379/legacy/build/pdf.mjs";
-import mammoth from "https://esm.sh/mammoth@1.8.0";
+import { extractText, getDocumentProxy } from "https://esm.sh/unpdf@0.12.1";
+import mammoth from "https://esm.sh/mammoth@1.8.0?target=denonext";
 import JSZip from "https://esm.sh/jszip@3.10.1";
 
 const corsHeaders = {
@@ -45,22 +45,10 @@ async function documentParserAgent(
   }
 
   if (ext === "pdf") {
-    const loadingTask = pdfjsLib.getDocument({
-      data: new Uint8Array(buffer),
-      useSystemFonts: true,
-      disableFontFace: true,
-    });
-    const pdf = await loadingTask.promise;
-    let text = "";
-    for (let i = 1; i <= pdf.numPages; i++) {
-      const page = await pdf.getPage(i);
-      const content = await page.getTextContent();
-      const pageText = content.items
-        .map((it: any) => ("str" in it ? it.str : ""))
-        .join(" ");
-      text += pageText + "\n";
-    }
-    return text;
+    // unpdf는 캔버스 의존성 없이 서버리스 환경에서 동작
+    const pdf = await getDocumentProxy(new Uint8Array(buffer));
+    const { text } = await extractText(pdf, { mergePages: true });
+    return Array.isArray(text) ? text.join("\n") : text;
   }
 
   if (ext === "docx") {
