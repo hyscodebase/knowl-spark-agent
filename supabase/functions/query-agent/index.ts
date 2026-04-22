@@ -69,15 +69,24 @@ async function answerAgent(
   const context = chunks
     .map(
       (c, i) =>
-        `[근거 ${i + 1}] (파일: ${c.file_name}, 위치: ${c.location}, 유사도: ${c.similarity.toFixed(3)})\n${c.content}`,
+        `[청크 #${i + 1}] (파일: ${c.file_name}, 위치: ${c.location}, 유사도: ${c.similarity.toFixed(3)})\n${c.content}`,
     )
     .join("\n\n---\n\n");
 
   const systemPrompt = `당신은 사용자의 로컬 문서를 분석하는 전문 지식 에이전트입니다.
-제공된 근거 발췌문만을 사용하여 한국어로 답변하세요. 추측하지 마세요.
-반드시 다음 JSON 스키마를 사용하여 structured output 도구를 호출하세요.`;
+제공된 청크만을 사용하여 한국어로 답변하세요. 추측 금지.
+반드시 submit_answer 도구를 호출하여 다음을 포함한 구조화된 답변을 제출하세요:
+- summary: 청크 내용에 기반한 간결한 요약
+- evidence: 답변을 직접 뒷받침하는 인용문 (원문 그대로)
+- confidence: 0.0~1.0 사이 답변 신뢰도. 다음 기준을 사용:
+  · 0.85+ : 여러 청크가 명확하고 일관되게 답을 직접 뒷받침
+  · 0.6~0.85 : 답이 도출되지만 부분적이거나 일부 추론 필요
+  · 0.3~0.6 : 청크가 간접적이거나 부분적으로만 관련
+  · 0.3 미만 : 청크가 질문에 거의 답하지 않음
+- contributions: 각 청크별 기여도. 모든 입력 청크(#1 ~ #N)에 대해 객체를 반환하며,
+  weight는 0.0~1.0 (요약 작성에 얼마나 사용되었는지), reason은 한국어 한 문장 사유.`;
 
-  const userPrompt = `질문: ${query}\n\n근거 발췌문들:\n\n${context}\n\n위 근거만을 사용하여 답변을 작성하세요.`;
+  const userPrompt = `질문: ${query}\n\n총 ${chunks.length}개의 청크가 제공됩니다 (인덱스 1~${chunks.length}):\n\n${context}\n\n위 청크만을 사용하여 답변하고, 각 청크의 기여도를 평가하세요.`;
 
   const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
     method: "POST",
@@ -104,6 +113,10 @@ async function answerAgent(
                   type: "string",
                   description: "근거에 기반한 한국어 종합 요약 (2-4문장)",
                 },
+                confidence: {
+                  type: "number",
+                  description: "답변 신뢰도 0.0~1.0",
+                },
                 evidence: {
                   type: "array",
                   description: "답변을 뒷받침하는 직접 인용문들 (원문 그대로)",
@@ -118,8 +131,31 @@ async function answerAgent(
                     additionalProperties: false,
                   },
                 },
+                contributions: {
+                  type: "array",
+                  description: "각 입력 청크별 요약 기여도 (모든 청크 포함)",
+                  items: {
+                    type: "object",
+                    properties: {
+                      chunk_index: {
+                        type: "integer",
+                        description: "청크 번호 (1부터 시작)",
+                      },
+                      weight: {
+                        type: "number",
+                        description: "기여도 가중치 0.0~1.0",
+                      },
+                      reason: {
+                        type: "string",
+                        description: "기여 또는 무관 사유 (한 문장)",
+                      },
+                    },
+                    required: ["chunk_index", "weight", "reason"],
+                    additionalProperties: false,
+                  },
+                },
               },
-              required: ["summary", "evidence"],
+              required: ["summary", "confidence", "evidence", "contributions"],
               additionalProperties: false,
             },
           },
@@ -148,9 +184,29 @@ async function answerAgent(
     ).values(),
   );
 
+  // 기여도 정규화: 모든 청크에 대한 항목 보장
+  const contribMap = new Map<number, { weight: number; reason: string }>();
+  for (const c of args.contributions || []) {
+    const idx = Number(c.chunk_index);
+    if (Number.isFinite(idx) && idx >= 1 && idx <= chunks.length) {
+      contribMap.set(idx, {
+        weight: Math.max(0, Math.min(1, Number(c.weight) || 0)),
+        reason: String(c.reason || ""),
+      });
+    }
+  }
+  const contributions = chunks.map((_, i) => {
+    const found = contribMap.get(i + 1);
+    return found ?? { weight: 0, reason: "모델이 평가하지 않음" };
+  });
+
+  const confidence = Math.max(0, Math.min(1, Number(args.confidence) || 0));
+
   return {
     summary: args.summary,
+    confidence,
     evidence: args.evidence || [],
+    contributions,
     relatedFiles,
   };
 }
