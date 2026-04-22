@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useEffect, useImperativeHandle, useState, forwardRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Slider } from "@/components/ui/slider";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/lib/auth";
 import { toast } from "sonner";
 import {
   Search,
@@ -27,14 +28,25 @@ type Result = {
   elapsedMs: number;
 };
 
-export function QueryPanel({ hasIndexedDocs }: { hasIndexedDocs: boolean }) {
+export type QueryPanelHandle = {
+  runWith: (query: string, topK: number) => void;
+};
+
+export const QueryPanel = forwardRef<
+  QueryPanelHandle,
+  { hasIndexedDocs: boolean; onHistoryChange?: () => void }
+>(function QueryPanel({ hasIndexedDocs, onHistoryChange }, ref) {
+  const { user } = useAuth();
   const [query, setQuery] = useState("");
   const [topK, setTopK] = useState(5);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<Result | null>(null);
+  const [pendingRun, setPendingRun] = useState<{ q: string; k: number } | null>(null);
 
-  const runQuery = async () => {
-    if (!query.trim()) return;
+  const runQuery = async (overrideQuery?: string, overrideTopK?: number) => {
+    const q = (overrideQuery ?? query).trim();
+    const k = overrideTopK ?? topK;
+    if (!q) return;
     if (!hasIndexedDocs) {
       toast.error("인덱싱된 문서가 없습니다", {
         description: "먼저 문서를 업로드하고 인덱싱하세요.",
@@ -44,15 +56,46 @@ export function QueryPanel({ hasIndexedDocs }: { hasIndexedDocs: boolean }) {
     setLoading(true);
     setResult(null);
     const { data, error } = await supabase.functions.invoke("query-agent", {
-      body: { query: query.trim(), topK },
+      body: { query: q, topK: k },
     });
     setLoading(false);
     if (error) {
       toast.error("검색 실패", { description: error.message });
       return;
     }
-    setResult(data as Result);
+    const res = data as Result;
+    setResult(res);
+
+    // 기록 저장
+    if (user) {
+      await supabase.from("query_history").insert({
+        user_id: user.id,
+        query: q,
+        top_k: k,
+        summary: res.summary?.slice(0, 500) ?? null,
+        result_count: res.matches?.length ?? 0,
+        elapsed_ms: res.elapsedMs ?? 0,
+      });
+      onHistoryChange?.();
+    }
   };
+
+  // 외부(기록 패널)에서 재실행 트리거
+  useImperativeHandle(ref, () => ({
+    runWith: (q: string, k: number) => {
+      setQuery(q);
+      setTopK(k);
+      setPendingRun({ q, k });
+    },
+  }));
+
+  useEffect(() => {
+    if (pendingRun) {
+      runQuery(pendingRun.q, pendingRun.k);
+      setPendingRun(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingRun]);
 
   return (
     <div className="space-y-6">
