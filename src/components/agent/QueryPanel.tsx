@@ -4,6 +4,15 @@ import { Card } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Slider } from "@/components/ui/slider";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Calendar } from "@/components/ui/calendar";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Toggle } from "@/components/ui/toggle";
+import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { toast } from "sonner";
@@ -18,6 +27,9 @@ import {
   Sparkles,
   Gauge,
   TrendingUp,
+  SlidersHorizontal,
+  Calendar as CalendarIcon,
+  X,
 } from "lucide-react";
 
 type Evidence = { quote: string; file_name: string; location: string };
@@ -33,6 +45,15 @@ type Result = {
   elapsedMs: number;
 };
 
+type Filters = {
+  fileTypes: string[];
+  filenameQuery: string;
+  dateFrom?: Date;
+  dateTo?: Date;
+};
+
+const FILE_TYPE_OPTIONS = ["pdf", "docx", "txt", "pptx"] as const;
+
 export type QueryPanelHandle = {
   runWith: (query: string, topK: number) => void;
 };
@@ -47,6 +68,28 @@ export const QueryPanel = forwardRef<
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<Result | null>(null);
   const [pendingRun, setPendingRun] = useState<{ q: string; k: number } | null>(null);
+  const [showFilters, setShowFilters] = useState(false);
+  const [filters, setFilters] = useState<Filters>({
+    fileTypes: [],
+    filenameQuery: "",
+  });
+
+  const activeFilterCount =
+    filters.fileTypes.length +
+    (filters.filenameQuery.trim() ? 1 : 0) +
+    (filters.dateFrom ? 1 : 0) +
+    (filters.dateTo ? 1 : 0);
+
+  const resetFilters = () =>
+    setFilters({ fileTypes: [], filenameQuery: "", dateFrom: undefined, dateTo: undefined });
+
+  const toggleFileType = (t: string) =>
+    setFilters((f) => ({
+      ...f,
+      fileTypes: f.fileTypes.includes(t)
+        ? f.fileTypes.filter((x) => x !== t)
+        : [...f.fileTypes, t],
+    }));
 
   const runQuery = async (overrideQuery?: string, overrideTopK?: number) => {
     const q = (overrideQuery ?? query).trim();
@@ -61,7 +104,26 @@ export const QueryPanel = forwardRef<
     setLoading(true);
     setResult(null);
     const { data, error } = await supabase.functions.invoke("query-agent", {
-      body: { query: q, topK: k },
+      body: {
+        query: q,
+        topK: k,
+        filters: {
+          fileTypes: filters.fileTypes,
+          filenameQuery: filters.filenameQuery.trim(),
+          dateFrom: filters.dateFrom ? filters.dateFrom.toISOString() : null,
+          dateTo: filters.dateTo
+            ? new Date(
+                filters.dateTo.getFullYear(),
+                filters.dateTo.getMonth(),
+                filters.dateTo.getDate(),
+                23,
+                59,
+                59,
+                999,
+              ).toISOString()
+            : null,
+        },
+      },
     });
     setLoading(false);
     if (error) {
@@ -70,6 +132,11 @@ export const QueryPanel = forwardRef<
     }
     const res = data as Result;
     setResult(res);
+    if (res.matches?.length === 0) {
+      toast.info("필터 조건에 맞는 청크가 없습니다", {
+        description: "필터를 완화하거나 다른 질문을 시도하세요.",
+      });
+    }
 
     // 기록 저장
     if (user) {
