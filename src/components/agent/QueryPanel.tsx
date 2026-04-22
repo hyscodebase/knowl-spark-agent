@@ -1,4 +1,4 @@
-import { useEffect, useImperativeHandle, useState, forwardRef } from "react";
+import { useEffect, useImperativeHandle, useRef, useState, forwardRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
@@ -191,7 +191,92 @@ function highlightTerms(text: string, query: string) {
   );
 }
 
+function highlightChunk(
+  text: string,
+  query: string,
+  evidence: Evidence[],
+  matchIdx: number,
+  matches: Match[],
+) {
+  // Find evidence quotes that belong to THIS chunk
+  const norm = (s: string) => s.replace(/\s+/g, " ").trim().toLowerCase();
+  const m = matches[matchIdx];
+  const chunkNorm = norm(m.content);
+  const quotes = evidence
+    .filter((e) => e.file_name === m.file_name && chunkNorm.includes(norm(e.quote).slice(0, 40)))
+    .map((e) => e.quote.trim())
+    .filter((q) => q.length >= 6);
+
+  if (quotes.length === 0) return highlightTerms(text, query);
+
+  // Split text by evidence quotes (case-insensitive), preserving them
+  const escaped = quotes.map((q) => q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  const re = new RegExp(`(${escaped.join("|")})`, "gi");
+  const parts = text.split(re);
+
+  return parts.map((p, i) => {
+    if (!p) return null;
+    const isQuote = quotes.some((q) => p.toLowerCase() === q.toLowerCase());
+    if (isQuote) {
+      return (
+        <mark
+          key={i}
+          className="rounded px-1 py-0.5 font-medium text-foreground"
+          style={{
+            backgroundColor: "color-mix(in oklab, var(--primary) 22%, transparent)",
+            boxShadow: "inset 0 -2px 0 0 var(--primary)",
+          }}
+        >
+          {highlightTerms(p, query)}
+        </mark>
+      );
+    }
+    return <span key={i}>{highlightTerms(p, query)}</span>;
+  });
+}
+
 function ResultDisplay({ result, query }: { result: Result; query: string }) {
+  const matchRefs = useRef<Record<number, HTMLDetailsElement | null>>({});
+  const [activeIdx, setActiveIdx] = useState<number | null>(null);
+
+  const findMatchIndex = (e: Evidence) => {
+    // Prefer exact file+location match containing the quote substring
+    const norm = (s: string) => s.replace(/\s+/g, " ").trim().toLowerCase();
+    const q = norm(e.quote).slice(0, 40);
+    let idx = result.matches.findIndex(
+      (m) =>
+        m.file_name === e.file_name &&
+        m.location === e.location &&
+        norm(m.content).includes(q),
+    );
+    if (idx === -1) {
+      idx = result.matches.findIndex(
+        (m) => m.file_name === e.file_name && norm(m.content).includes(q),
+      );
+    }
+    if (idx === -1) {
+      idx = result.matches.findIndex(
+        (m) => m.file_name === e.file_name && m.location === e.location,
+      );
+    }
+    return idx;
+  };
+
+  const jumpToMatch = (e: Evidence) => {
+    const idx = findMatchIndex(e);
+    if (idx === -1) {
+      toast.info("해당 청크를 찾을 수 없습니다");
+      return;
+    }
+    const el = matchRefs.current[idx];
+    if (el) {
+      el.open = true;
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      setActiveIdx(idx);
+      window.setTimeout(() => setActiveIdx((cur) => (cur === idx ? null : cur)), 2200);
+    }
+  };
+
   return (
     <Card className="overflow-hidden" style={{ boxShadow: "var(--shadow-elevated)" }}>
       <div
@@ -239,16 +324,23 @@ function ResultDisplay({ result, query }: { result: Result; query: string }) {
           ) : (
             <ul className="space-y-3">
               {result.evidence.map((e, i) => (
-                <li
-                  key={i}
-                  className="rounded-lg border-l-4 border-l-primary bg-secondary/60 px-4 py-3"
-                >
-                  <p className="text-sm italic leading-relaxed text-foreground">
-                    "{highlightTerms(e.quote, query)}"
-                  </p>
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    — {e.file_name} · {e.location}
-                  </p>
+                <li key={i}>
+                  <button
+                    type="button"
+                    onClick={() => jumpToMatch(e)}
+                    className="group block w-full rounded-lg border-l-4 border-l-primary bg-secondary/60 px-4 py-3 text-left transition-all hover:bg-secondary hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
+                    title="원문 청크로 이동"
+                  >
+                    <p className="text-sm italic leading-relaxed text-foreground">
+                      "{highlightTerms(e.quote, query)}"
+                    </p>
+                    <p className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <span>— {e.file_name} · {e.location}</span>
+                      <span className="ml-auto text-primary opacity-0 transition-opacity group-hover:opacity-100">
+                        원문 보기 →
+                      </span>
+                    </p>
+                  </button>
                 </li>
               ))}
             </ul>
@@ -261,7 +353,14 @@ function ResultDisplay({ result, query }: { result: Result; query: string }) {
             {result.matches.map((m, i) => (
               <details
                 key={i}
-                className="group rounded-lg border bg-background p-3"
+                ref={(el) => {
+                  matchRefs.current[i] = el;
+                }}
+                className={`group rounded-lg border bg-background p-3 transition-all ${
+                  activeIdx === i
+                    ? "border-primary ring-2 ring-primary/40 shadow-md"
+                    : ""
+                }`}
               >
                 <summary className="flex cursor-pointer items-center justify-between text-xs">
                   <span className="flex items-center gap-2">
@@ -280,7 +379,7 @@ function ResultDisplay({ result, query }: { result: Result; query: string }) {
                   </Badge>
                 </summary>
                 <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
-                  {highlightTerms(m.content, query)}
+                  {highlightChunk(m.content, query, result.evidence, i, result.matches)}
                 </p>
               </details>
             ))}
