@@ -131,7 +131,7 @@ export const QueryPanel = forwardRef<
               {topK}
             </Badge>
           </div>
-          <Button onClick={runQuery} disabled={loading || !query.trim()}>
+          <Button onClick={() => runQuery()} disabled={loading || !query.trim()}>
             {loading ? (
               <>
                 <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
