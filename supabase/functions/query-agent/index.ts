@@ -11,10 +11,18 @@ const corsHeaders = {
 };
 
 // ===== 에이전트 4: 시맨틱 검색 =====
+type SearchFilters = {
+  fileTypes?: string[] | null;
+  filenameQuery?: string | null;
+  dateFrom?: string | null;
+  dateTo?: string | null;
+};
+
 async function semanticSearchAgent(
   supabase: any,
   query: string,
   topK: number,
+  filters: SearchFilters = {},
 ) {
   const apiKey = Deno.env.get("LOVABLE_API_KEY");
   if (!apiKey) throw new Error("LOVABLE_API_KEY가 설정되지 않았습니다");
@@ -42,9 +50,14 @@ async function semanticSearchAgent(
   if (!queryVec) throw new Error("쿼리 임베딩이 비어있습니다");
 
   // pgvector 검색 (RPC, RLS 적용 — auth.uid() 기반)
+  const fileTypes = (filters.fileTypes ?? []).filter(Boolean);
   const { data: matches, error } = await supabase.rpc("match_chunks", {
     query_embedding: queryVec,
     match_count: topK,
+    file_types: fileTypes.length > 0 ? fileTypes : null,
+    filename_query: filters.filenameQuery?.trim() || null,
+    date_from: filters.dateFrom || null,
+    date_to: filters.dateTo || null,
   });
   if (error) throw new Error(`벡터 검색 실패: ${error.message}`);
   return matches || [];
@@ -233,15 +246,20 @@ Deno.serve(async (req) => {
       { global: { headers: { Authorization: authHeader } } },
     );
 
-    const { query, topK = 5 } = await req.json();
+    const { query, topK = 5, filters = {} } = await req.json();
     if (!query || typeof query !== "string" || query.trim().length === 0) {
       throw new Error("질문이 비어있습니다");
     }
     if (query.length > 1000) throw new Error("질문은 1000자 이하여야 합니다");
     const k = Math.max(1, Math.min(20, Number(topK) || 5));
 
-    // 4) 시맨틱 검색
-    const matches = await semanticSearchAgent(supabase, query, k);
+    // 4) 시맨틱 검색 (필터 적용)
+    const matches = await semanticSearchAgent(supabase, query, k, {
+      fileTypes: Array.isArray(filters.fileTypes) ? filters.fileTypes : null,
+      filenameQuery: typeof filters.filenameQuery === "string" ? filters.filenameQuery : null,
+      dateFrom: typeof filters.dateFrom === "string" ? filters.dateFrom : null,
+      dateTo: typeof filters.dateTo === "string" ? filters.dateTo : null,
+    });
 
     // 5) 답변 생성
     const answer = await answerAgent(query, matches);
