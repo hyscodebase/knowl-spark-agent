@@ -4,6 +4,15 @@ import { Card } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Slider } from "@/components/ui/slider";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Calendar } from "@/components/ui/calendar";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Toggle } from "@/components/ui/toggle";
+import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { toast } from "sonner";
@@ -18,6 +27,9 @@ import {
   Sparkles,
   Gauge,
   TrendingUp,
+  SlidersHorizontal,
+  Calendar as CalendarIcon,
+  X,
 } from "lucide-react";
 
 type Evidence = { quote: string; file_name: string; location: string };
@@ -33,6 +45,15 @@ type Result = {
   elapsedMs: number;
 };
 
+type Filters = {
+  fileTypes: string[];
+  filenameQuery: string;
+  dateFrom?: Date;
+  dateTo?: Date;
+};
+
+const FILE_TYPE_OPTIONS = ["pdf", "docx", "txt", "pptx"] as const;
+
 export type QueryPanelHandle = {
   runWith: (query: string, topK: number) => void;
 };
@@ -47,6 +68,28 @@ export const QueryPanel = forwardRef<
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<Result | null>(null);
   const [pendingRun, setPendingRun] = useState<{ q: string; k: number } | null>(null);
+  const [showFilters, setShowFilters] = useState(false);
+  const [filters, setFilters] = useState<Filters>({
+    fileTypes: [],
+    filenameQuery: "",
+  });
+
+  const activeFilterCount =
+    filters.fileTypes.length +
+    (filters.filenameQuery.trim() ? 1 : 0) +
+    (filters.dateFrom ? 1 : 0) +
+    (filters.dateTo ? 1 : 0);
+
+  const resetFilters = () =>
+    setFilters({ fileTypes: [], filenameQuery: "", dateFrom: undefined, dateTo: undefined });
+
+  const toggleFileType = (t: string) =>
+    setFilters((f) => ({
+      ...f,
+      fileTypes: f.fileTypes.includes(t)
+        ? f.fileTypes.filter((x) => x !== t)
+        : [...f.fileTypes, t],
+    }));
 
   const runQuery = async (overrideQuery?: string, overrideTopK?: number) => {
     const q = (overrideQuery ?? query).trim();
@@ -61,7 +104,26 @@ export const QueryPanel = forwardRef<
     setLoading(true);
     setResult(null);
     const { data, error } = await supabase.functions.invoke("query-agent", {
-      body: { query: q, topK: k },
+      body: {
+        query: q,
+        topK: k,
+        filters: {
+          fileTypes: filters.fileTypes,
+          filenameQuery: filters.filenameQuery.trim(),
+          dateFrom: filters.dateFrom ? filters.dateFrom.toISOString() : null,
+          dateTo: filters.dateTo
+            ? new Date(
+                filters.dateTo.getFullYear(),
+                filters.dateTo.getMonth(),
+                filters.dateTo.getDate(),
+                23,
+                59,
+                59,
+                999,
+              ).toISOString()
+            : null,
+        },
+      },
     });
     setLoading(false);
     if (error) {
@@ -70,6 +132,11 @@ export const QueryPanel = forwardRef<
     }
     const res = data as Result;
     setResult(res);
+    if (res.matches?.length === 0) {
+      toast.info("필터 조건에 맞는 청크가 없습니다", {
+        description: "필터를 완화하거나 다른 질문을 시도하세요.",
+      });
+    }
 
     // 기록 저장
     if (user) {
@@ -136,6 +203,20 @@ export const QueryPanel = forwardRef<
               {topK}
             </Badge>
           </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setShowFilters((s) => !s)}
+          >
+            <SlidersHorizontal className="mr-1.5 h-4 w-4" />
+            필터
+            {activeFilterCount > 0 && (
+              <Badge variant="secondary" className="ml-2 h-5 px-1.5 font-mono text-[10px]">
+                {activeFilterCount}
+              </Badge>
+            )}
+          </Button>
           <Button onClick={() => runQuery()} disabled={loading || !query.trim()}>
             {loading ? (
               <>
@@ -150,6 +231,81 @@ export const QueryPanel = forwardRef<
             )}
           </Button>
         </div>
+
+        {showFilters && (
+          <div className="mt-4 space-y-4 rounded-lg border bg-secondary/30 p-4">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                검색 범위 필터
+              </span>
+              {activeFilterCount > 0 && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={resetFilters}
+                  className="h-7 text-xs"
+                >
+                  <X className="mr-1 h-3 w-3" />
+                  초기화
+                </Button>
+              )}
+            </div>
+
+            {/* 파일 유형 */}
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+                문서 유형
+              </label>
+              <div className="flex flex-wrap gap-1.5">
+                {FILE_TYPE_OPTIONS.map((t) => {
+                  const active = filters.fileTypes.includes(t);
+                  return (
+                    <Toggle
+                      key={t}
+                      pressed={active}
+                      onPressedChange={() => toggleFileType(t)}
+                      size="sm"
+                      className="h-7 px-2.5 text-xs uppercase data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+                    >
+                      {t}
+                    </Toggle>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* 파일명 키워드 */}
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+                파일명 키워드
+              </label>
+              <Input
+                value={filters.filenameQuery}
+                onChange={(e) =>
+                  setFilters((f) => ({ ...f, filenameQuery: e.target.value }))
+                }
+                placeholder="예: 마케팅, Q3, 보고서"
+                className="h-9"
+              />
+            </div>
+
+            {/* 날짜 범위 */}
+            <div className="grid grid-cols-2 gap-2">
+              <DateField
+                label="시작일"
+                value={filters.dateFrom}
+                onChange={(d) => setFilters((f) => ({ ...f, dateFrom: d }))}
+              />
+              <DateField
+                label="종료일"
+                value={filters.dateTo}
+                onChange={(d) => setFilters((f) => ({ ...f, dateTo: d }))}
+                disabledBefore={filters.dateFrom}
+              />
+            </div>
+          </div>
+        )}
       </Card>
 
       {loading && (
@@ -521,6 +677,72 @@ function Section({
         <h4 className="text-sm font-semibold">{label}</h4>
       </div>
       <div className="pl-6">{children}</div>
+    </div>
+  );
+}
+
+function DateField({
+  label,
+  value,
+  onChange,
+  disabledBefore,
+}: {
+  label: string;
+  value?: Date;
+  onChange: (d: Date | undefined) => void;
+  disabledBefore?: Date;
+}) {
+  const fmt = (d: Date) =>
+    `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, "0")}.${String(
+      d.getDate(),
+    ).padStart(2, "0")}`;
+  return (
+    <div>
+      <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+        {label}
+      </label>
+      <Popover>
+        <PopoverTrigger asChild>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className={cn(
+              "h-9 w-full justify-start text-left font-normal",
+              !value && "text-muted-foreground",
+            )}
+          >
+            <CalendarIcon className="mr-2 h-3.5 w-3.5" />
+            {value ? fmt(value) : <span>날짜 선택</span>}
+            {value && (
+              <span
+                role="button"
+                tabIndex={0}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onChange(undefined);
+                }}
+                className="ml-auto rounded p-0.5 hover:bg-muted"
+              >
+                <X className="h-3 w-3" />
+              </span>
+            )}
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-auto p-0" align="start">
+          <Calendar
+            mode="single"
+            selected={value}
+            onSelect={onChange}
+            disabled={(date) =>
+              date > new Date() ||
+              (disabledBefore ? date < disabledBefore : false)
+            }
+            initialFocus
+            className={cn("p-3 pointer-events-auto")}
+          />
+        </PopoverContent>
+      </Popover>
     </div>
   );
 }
