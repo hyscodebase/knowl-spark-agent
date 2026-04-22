@@ -16,13 +16,18 @@ import {
   FolderOpen,
   Clock,
   Sparkles,
+  Gauge,
+  TrendingUp,
 } from "lucide-react";
 
 type Evidence = { quote: string; file_name: string; location: string };
 type Match = { content: string; file_name: string; location: string; similarity: number };
+type Contribution = { weight: number; reason: string };
 type Result = {
   summary: string;
+  confidence: number;
   evidence: Evidence[];
+  contributions: Contribution[];
   relatedFiles: { file_name: string; location: string }[];
   matches: Match[];
   elapsedMs: number;
