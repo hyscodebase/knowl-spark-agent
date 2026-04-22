@@ -136,7 +136,14 @@ export type Database = {
     }
     Functions: {
       match_chunks: {
-        Args: { match_count?: number; query_embedding: string }
+        Args: {
+          date_from?: string
+          date_to?: string
+          file_types?: string[]
+          filename_query?: string
+          match_count?: number
+          query_embedding: string
+        }
         Returns: {
           chunk_index: number
           content: string
