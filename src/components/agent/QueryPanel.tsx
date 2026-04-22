@@ -1,0 +1,269 @@
+import { useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Textarea } from "@/components/ui/textarea";
+import { Slider } from "@/components/ui/slider";
+import { Badge } from "@/components/ui/badge";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
+import {
+  Search,
+  Loader2,
+  FileText,
+  BookOpen,
+  Quote,
+  FolderOpen,
+  Clock,
+  Sparkles,
+} from "lucide-react";
+
+type Evidence = { quote: string; file_name: string; location: string };
+type Match = { content: string; file_name: string; location: string; similarity: number };
+type Result = {
+  summary: string;
+  evidence: Evidence[];
+  relatedFiles: { file_name: string; location: string }[];
+  matches: Match[];
+  elapsedMs: number;
+};
+
+export function QueryPanel({ hasIndexedDocs }: { hasIndexedDocs: boolean }) {
+  const [query, setQuery] = useState("");
+  const [topK, setTopK] = useState(5);
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<Result | null>(null);
+
+  const runQuery = async () => {
+    if (!query.trim()) return;
+    if (!hasIndexedDocs) {
+      toast.error("인덱싱된 문서가 없습니다", {
+        description: "먼저 문서를 업로드하고 인덱싱하세요.",
+      });
+      return;
+    }
+    setLoading(true);
+    setResult(null);
+    const { data, error } = await supabase.functions.invoke("query-agent", {
+      body: { query: query.trim(), topK },
+    });
+    setLoading(false);
+    if (error) {
+      toast.error("검색 실패", { description: error.message });
+      return;
+    }
+    setResult(data as Result);
+  };
+
+  return (
+    <div className="space-y-6">
+      <Card className="p-6" style={{ boxShadow: "var(--shadow-soft)" }}>
+        <h3 className="mb-1 text-base font-semibold">의미 기반 질의</h3>
+        <p className="mb-4 text-xs text-muted-foreground">
+          질문을 입력하면 5개 에이전트가 협력하여 근거 있는 답변을 생성합니다
+        </p>
+
+        <Textarea
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="예: Q3 마케팅 전략의 핵심 포인트는 무엇인가요?"
+          className="min-h-[88px] resize-none"
+          maxLength={1000}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) runQuery();
+          }}
+        />
+
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-4">
+          <div className="flex min-w-[220px] flex-1 items-center gap-3">
+            <span className="text-xs font-medium text-muted-foreground">Top-K</span>
+            <Slider
+              value={[topK]}
+              onValueChange={(v) => setTopK(v[0])}
+              min={1}
+              max={15}
+              step={1}
+              className="flex-1"
+            />
+            <Badge variant="secondary" className="font-mono">
+              {topK}
+            </Badge>
+          </div>
+          <Button onClick={runQuery} disabled={loading || !query.trim()}>
+            {loading ? (
+              <>
+                <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                에이전트 실행 중...
+              </>
+            ) : (
+              <>
+                <Search className="mr-1.5 h-4 w-4" />
+                검색 및 답변
+              </>
+            )}
+          </Button>
+        </div>
+      </Card>
+
+      {loading && (
+        <Card className="p-6">
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin text-primary" />
+              시맨틱 검색 에이전트가 관련 청크를 가져오는 중...
+            </div>
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Sparkles className="h-4 w-4 text-primary" />
+              답변 에이전트가 근거 기반 응답을 작성하는 중...
+            </div>
+          </div>
+        </Card>
+      )}
+
+      {result && <ResultDisplay result={result} query={query} />}
+    </div>
+  );
+}
+
+function highlightTerms(text: string, query: string) {
+  const terms = query
+    .split(/\s+/)
+    .filter((t) => t.length >= 2)
+    .slice(0, 8);
+  if (terms.length === 0) return text;
+  const escaped = terms.map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  const re = new RegExp(`(${escaped.join("|")})`, "gi");
+  const parts = text.split(re);
+  return parts.map((p, i) =>
+    re.test(p) ? (
+      <mark
+        key={i}
+        className="rounded px-0.5"
+        style={{ backgroundColor: "var(--color-highlight)" }}
+      >
+        {p}
+      </mark>
+    ) : (
+      <span key={i}>{p}</span>
+    ),
+  );
+}
+
+function ResultDisplay({ result, query }: { result: Result; query: string }) {
+  return (
+    <Card className="overflow-hidden" style={{ boxShadow: "var(--shadow-elevated)" }}>
+      <div
+        className="flex items-center justify-between border-b px-6 py-3"
+        style={{ background: "var(--gradient-subtle)" }}
+      >
+        <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+          답변 결과
+        </span>
+        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <Clock className="h-3 w-3" />
+          {(result.elapsedMs / 1000).toFixed(2)}초
+        </div>
+      </div>
+
+      <div className="space-y-6 p-6">
+        {/* 관련 파일 */}
+        <Section icon={FileText} label="📄 관련 파일">
+          {result.relatedFiles.length === 0 ? (
+            <p className="text-sm text-muted-foreground">관련 파일 없음</p>
+          ) : (
+            <ul className="space-y-1">
+              {result.relatedFiles.map((f) => (
+                <li
+                  key={f.file_name}
+                  className="flex items-center gap-2 text-sm"
+                >
+                  <span className="font-medium">{f.file_name}</span>
+                  <span className="text-xs text-muted-foreground">{f.location}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Section>
+
+        {/* 요약 */}
+        <Section icon={BookOpen} label="🧠 요약">
+          <p className="text-sm leading-relaxed">{result.summary}</p>
+        </Section>
+
+        {/* 근거 */}
+        <Section icon={Quote} label="📍 근거">
+          {result.evidence.length === 0 ? (
+            <p className="text-sm text-muted-foreground">인용 가능한 근거 없음</p>
+          ) : (
+            <ul className="space-y-3">
+              {result.evidence.map((e, i) => (
+                <li
+                  key={i}
+                  className="rounded-lg border-l-4 border-l-primary bg-secondary/60 px-4 py-3"
+                >
+                  <p className="text-sm italic leading-relaxed text-foreground">
+                    "{highlightTerms(e.quote, query)}"
+                  </p>
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    — {e.file_name} · {e.location}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Section>
+
+        {/* 위치 + 검색된 청크 */}
+        <Section icon={FolderOpen} label="📁 위치 및 검색된 청크">
+          <div className="space-y-2">
+            {result.matches.map((m, i) => (
+              <details
+                key={i}
+                className="group rounded-lg border bg-background p-3"
+              >
+                <summary className="flex cursor-pointer items-center justify-between text-xs">
+                  <span className="flex items-center gap-2">
+                    <Badge variant="outline" className="font-mono">
+                      #{i + 1}
+                    </Badge>
+                    <span className="font-medium">{m.file_name}</span>
+                    <span className="text-muted-foreground">{m.location}</span>
+                  </span>
+                  <Badge
+                    variant="secondary"
+                    className="font-mono"
+                    title="코사인 유사도"
+                  >
+                    {m.similarity.toFixed(3)}
+                  </Badge>
+                </summary>
+                <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
+                  {highlightTerms(m.content, query)}
+                </p>
+              </details>
+            ))}
+          </div>
+        </Section>
+      </div>
+    </Card>
+  );
+}
+
+function Section({
+  icon: Icon,
+  label,
+  children,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div>
+      <div className="mb-2 flex items-center gap-2">
+        <Icon className="h-4 w-4 text-primary" />
+        <h4 className="text-sm font-semibold">{label}</h4>
+      </div>
+      <div className="pl-6">{children}</div>
+    </div>
+  );
+}
