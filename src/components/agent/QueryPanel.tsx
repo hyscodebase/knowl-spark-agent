@@ -244,6 +244,21 @@ function ResultDisplay({ result, query }: { result: Result; query: string }) {
   const matchRefs = useRef<Record<number, HTMLDetailsElement | null>>({});
   const [activeIdx, setActiveIdx] = useState<number | null>(null);
 
+  const confPct = Math.round((result.confidence ?? 0) * 100);
+  const confTone =
+    confPct >= 80
+      ? { label: "높음", color: "var(--primary)", bg: "color-mix(in oklab, var(--primary) 18%, transparent)" }
+      : confPct >= 55
+        ? { label: "중간", color: "oklch(0.68 0.15 75)", bg: "color-mix(in oklab, oklch(0.68 0.15 75) 18%, transparent)" }
+        : { label: "낮음", color: "oklch(0.62 0.2 25)", bg: "color-mix(in oklab, oklch(0.62 0.2 25) 18%, transparent)" };
+
+  // 기여도 상위 청크
+  const topContributors = (result.contributions ?? [])
+    .map((c, i) => ({ ...c, idx: i }))
+    .filter((c) => c.weight > 0.05)
+    .sort((a, b) => b.weight - a.weight)
+    .slice(0, 5);
+
   const findMatchIndex = (e: Evidence) => {
     // Prefer exact file+location match containing the quote substring
     const norm = (s: string) => s.replace(/\s+/g, " ").trim().toLowerCase();
@@ -288,9 +303,19 @@ function ResultDisplay({ result, query }: { result: Result; query: string }) {
         className="flex items-center justify-between border-b px-6 py-3"
         style={{ background: "var(--gradient-subtle)" }}
       >
-        <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-          답변 결과
-        </span>
+        <div className="flex items-center gap-3">
+          <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+            답변 결과
+          </span>
+          <div
+            className="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium"
+            style={{ backgroundColor: confTone.bg, color: confTone.color }}
+            title="모델이 자체 평가한 답변 신뢰도"
+          >
+            <Gauge className="h-3 w-3" />
+            신뢰도 {confPct}% · {confTone.label}
+          </div>
+        </div>
         <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
           <Clock className="h-3 w-3" />
           {(result.elapsedMs / 1000).toFixed(2)}초
@@ -320,7 +345,75 @@ function ResultDisplay({ result, query }: { result: Result; query: string }) {
         {/* 요약 */}
         <Section icon={BookOpen} label="🧠 요약">
           <p className="text-sm leading-relaxed">{result.summary}</p>
+          <div className="mt-3 rounded-lg border bg-secondary/40 px-3 py-2">
+            <div className="mb-1.5 flex items-center justify-between text-xs">
+              <span className="font-medium text-muted-foreground">답변 신뢰도</span>
+              <span className="font-mono font-semibold" style={{ color: confTone.color }}>
+                {confPct}%
+              </span>
+            </div>
+            <div className="h-1.5 overflow-hidden rounded-full bg-background">
+              <div
+                className="h-full rounded-full transition-all"
+                style={{ width: `${confPct}%`, backgroundColor: confTone.color }}
+              />
+            </div>
+          </div>
         </Section>
+
+        {/* 핵심 기여 청크 */}
+        {topContributors.length > 0 && (
+          <Section icon={TrendingUp} label="⭐ 핵심 기여 청크">
+            <ul className="space-y-2">
+              {topContributors.map((c) => {
+                const m = result.matches[c.idx];
+                if (!m) return null;
+                const pct = Math.round(c.weight * 100);
+                return (
+                  <li
+                    key={c.idx}
+                    className="rounded-lg border bg-background p-3"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex min-w-0 items-center gap-2">
+                        <Badge variant="outline" className="font-mono">
+                          #{c.idx + 1}
+                        </Badge>
+                        <span className="truncate text-sm font-medium">
+                          {m.file_name}
+                        </span>
+                        <span className="truncate text-xs text-muted-foreground">
+                          {m.location}
+                        </span>
+                      </div>
+                      <Badge
+                        variant="secondary"
+                        className="font-mono"
+                        title="요약 기여도"
+                      >
+                        {pct}%
+                      </Badge>
+                    </div>
+                    <div className="mt-2 h-1 overflow-hidden rounded-full bg-secondary">
+                      <div
+                        className="h-full rounded-full"
+                        style={{
+                          width: `${pct}%`,
+                          backgroundColor: "var(--primary)",
+                        }}
+                      />
+                    </div>
+                    {c.reason && (
+                      <p className="mt-2 text-xs text-muted-foreground">
+                        {c.reason}
+                      </p>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          </Section>
+        )}
 
         {/* 근거 */}
         <Section icon={Quote} label="📍 근거">
