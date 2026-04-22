@@ -97,6 +97,39 @@ export type Database = {
         }
         Relationships: []
       }
+      query_history: {
+        Row: {
+          created_at: string
+          elapsed_ms: number
+          id: string
+          query: string
+          result_count: number
+          summary: string | null
+          top_k: number
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          elapsed_ms?: number
+          id?: string
+          query: string
+          result_count?: number
+          summary?: string | null
+          top_k?: number
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          elapsed_ms?: number
+          id?: string
+          query?: string
+          result_count?: number
+          summary?: string | null
+          top_k?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
