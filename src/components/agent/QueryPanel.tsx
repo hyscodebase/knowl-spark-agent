@@ -165,7 +165,7 @@ export const QueryPanel = forwardRef<
       {result && <ResultDisplay result={result} query={query} />}
     </div>
   );
-}
+});
 
 function highlightTerms(text: string, query: string) {
   const terms = query
