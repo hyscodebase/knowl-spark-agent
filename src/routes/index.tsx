@@ -1,12 +1,13 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { Brain, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/integrations/supabase/client";
 import { PipelineHeader } from "@/components/agent/PipelineHeader";
 import { UploadPanel } from "@/components/agent/UploadPanel";
-import { QueryPanel } from "@/components/agent/QueryPanel";
+import { QueryPanel, type QueryPanelHandle } from "@/components/agent/QueryPanel";
+import { HistoryPanel, type HistoryPanelHandle } from "@/components/agent/HistoryPanel";
 
 export const Route = createFileRoute("/")({
   component: Index,
@@ -27,6 +28,8 @@ function Index() {
   const navigate = useNavigate();
   const { user, loading, signOut } = useAuth();
   const [documents, setDocuments] = useState<DocRow[]>([]);
+  const queryRef = useRef<QueryPanelHandle>(null);
+  const historyRef = useRef<HistoryPanelHandle>(null);
 
   useEffect(() => {
     if (!loading && !user) navigate({ to: "/auth" });
@@ -102,8 +105,18 @@ function Index() {
         <PipelineHeader />
 
         <div className="grid gap-6 lg:grid-cols-[400px_1fr]">
-          <UploadPanel documents={documents} onChange={fetchDocs} />
-          <QueryPanel hasIndexedDocs={hasIndexed} />
+          <div className="space-y-6">
+            <UploadPanel documents={documents} onChange={fetchDocs} />
+            <HistoryPanel
+              ref={historyRef}
+              onRerun={(q, k) => queryRef.current?.runWith(q, k)}
+            />
+          </div>
+          <QueryPanel
+            ref={queryRef}
+            hasIndexedDocs={hasIndexed}
+            onHistoryChange={() => historyRef.current?.refresh()}
+          />
         </div>
 
         <footer className="pt-4 text-center text-xs text-muted-foreground">
