@@ -468,13 +468,30 @@ function ResultDisplay({ result, query }: { result: Result; query: string }) {
                     <span className="font-medium">{m.file_name}</span>
                     <span className="text-muted-foreground">{m.location}</span>
                   </span>
-                  <Badge
-                    variant="secondary"
-                    className="font-mono"
-                    title="코사인 유사도"
-                  >
-                    {m.similarity.toFixed(3)}
-                  </Badge>
+                  <span className="flex items-center gap-1.5">
+                    {result.contributions?.[i] && result.contributions[i].weight > 0.05 && (
+                      <Badge
+                        variant="secondary"
+                        className="gap-1 font-mono"
+                        style={{
+                          backgroundColor:
+                            "color-mix(in oklab, var(--primary) 15%, transparent)",
+                          color: "var(--primary)",
+                        }}
+                        title={`요약 기여도: ${result.contributions[i].reason}`}
+                      >
+                        <TrendingUp className="h-3 w-3" />
+                        {Math.round(result.contributions[i].weight * 100)}%
+                      </Badge>
+                    )}
+                    <Badge
+                      variant="secondary"
+                      className="font-mono"
+                      title="코사인 유사도"
+                    >
+                      {m.similarity.toFixed(3)}
+                    </Badge>
+                  </span>
                 </summary>
                 <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
                   {highlightChunk(m.content, query, result.evidence, i, result.matches)}
