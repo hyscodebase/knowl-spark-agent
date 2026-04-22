@@ -680,3 +680,69 @@ function Section({
     </div>
   );
 }
+
+function DateField({
+  label,
+  value,
+  onChange,
+  disabledBefore,
+}: {
+  label: string;
+  value?: Date;
+  onChange: (d: Date | undefined) => void;
+  disabledBefore?: Date;
+}) {
+  const fmt = (d: Date) =>
+    `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, "0")}.${String(
+      d.getDate(),
+    ).padStart(2, "0")}`;
+  return (
+    <div>
+      <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+        {label}
+      </label>
+      <Popover>
+        <PopoverTrigger asChild>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className={cn(
+              "h-9 w-full justify-start text-left font-normal",
+              !value && "text-muted-foreground",
+            )}
+          >
+            <CalendarIcon className="mr-2 h-3.5 w-3.5" />
+            {value ? fmt(value) : <span>날짜 선택</span>}
+            {value && (
+              <span
+                role="button"
+                tabIndex={0}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onChange(undefined);
+                }}
+                className="ml-auto rounded p-0.5 hover:bg-muted"
+              >
+                <X className="h-3 w-3" />
+              </span>
+            )}
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-auto p-0" align="start">
+          <Calendar
+            mode="single"
+            selected={value}
+            onSelect={onChange}
+            disabled={(date) =>
+              date > new Date() ||
+              (disabledBefore ? date < disabledBefore : false)
+            }
+            initialFocus
+            className={cn("p-3 pointer-events-auto")}
+          />
+        </PopoverContent>
+      </Popover>
+    </div>
+  );
+}
