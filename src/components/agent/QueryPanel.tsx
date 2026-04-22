@@ -203,6 +203,20 @@ export const QueryPanel = forwardRef<
               {topK}
             </Badge>
           </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setShowFilters((s) => !s)}
+          >
+            <SlidersHorizontal className="mr-1.5 h-4 w-4" />
+            필터
+            {activeFilterCount > 0 && (
+              <Badge variant="secondary" className="ml-2 h-5 px-1.5 font-mono text-[10px]">
+                {activeFilterCount}
+              </Badge>
+            )}
+          </Button>
           <Button onClick={() => runQuery()} disabled={loading || !query.trim()}>
             {loading ? (
               <>
@@ -217,6 +231,81 @@ export const QueryPanel = forwardRef<
             )}
           </Button>
         </div>
+
+        {showFilters && (
+          <div className="mt-4 space-y-4 rounded-lg border bg-secondary/30 p-4">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                검색 범위 필터
+              </span>
+              {activeFilterCount > 0 && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={resetFilters}
+                  className="h-7 text-xs"
+                >
+                  <X className="mr-1 h-3 w-3" />
+                  초기화
+                </Button>
+              )}
+            </div>
+
+            {/* 파일 유형 */}
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+                문서 유형
+              </label>
+              <div className="flex flex-wrap gap-1.5">
+                {FILE_TYPE_OPTIONS.map((t) => {
+                  const active = filters.fileTypes.includes(t);
+                  return (
+                    <Toggle
+                      key={t}
+                      pressed={active}
+                      onPressedChange={() => toggleFileType(t)}
+                      size="sm"
+                      className="h-7 px-2.5 text-xs uppercase data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+                    >
+                      {t}
+                    </Toggle>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* 파일명 키워드 */}
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+                파일명 키워드
+              </label>
+              <Input
+                value={filters.filenameQuery}
+                onChange={(e) =>
+                  setFilters((f) => ({ ...f, filenameQuery: e.target.value }))
+                }
+                placeholder="예: 마케팅, Q3, 보고서"
+                className="h-9"
+              />
+            </div>
+
+            {/* 날짜 범위 */}
+            <div className="grid grid-cols-2 gap-2">
+              <DateField
+                label="시작일"
+                value={filters.dateFrom}
+                onChange={(d) => setFilters((f) => ({ ...f, dateFrom: d }))}
+              />
+              <DateField
+                label="종료일"
+                value={filters.dateTo}
+                onChange={(d) => setFilters((f) => ({ ...f, dateTo: d }))}
+                disabledBefore={filters.dateFrom}
+              />
+            </div>
+          </div>
+        )}
       </Card>
 
       {loading && (
