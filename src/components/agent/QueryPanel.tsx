@@ -191,6 +191,50 @@ function highlightTerms(text: string, query: string) {
   );
 }
 
+function highlightChunk(
+  text: string,
+  query: string,
+  evidence: Evidence[],
+  matchIdx: number,
+  matches: Match[],
+) {
+  // Find evidence quotes that belong to THIS chunk
+  const norm = (s: string) => s.replace(/\s+/g, " ").trim().toLowerCase();
+  const m = matches[matchIdx];
+  const chunkNorm = norm(m.content);
+  const quotes = evidence
+    .filter((e) => e.file_name === m.file_name && chunkNorm.includes(norm(e.quote).slice(0, 40)))
+    .map((e) => e.quote.trim())
+    .filter((q) => q.length >= 6);
+
+  if (quotes.length === 0) return highlightTerms(text, query);
+
+  // Split text by evidence quotes (case-insensitive), preserving them
+  const escaped = quotes.map((q) => q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  const re = new RegExp(`(${escaped.join("|")})`, "gi");
+  const parts = text.split(re);
+
+  return parts.map((p, i) => {
+    if (!p) return null;
+    const isQuote = quotes.some((q) => p.toLowerCase() === q.toLowerCase());
+    if (isQuote) {
+      return (
+        <mark
+          key={i}
+          className="rounded px-1 py-0.5 font-medium text-foreground"
+          style={{
+            backgroundColor: "color-mix(in oklab, var(--primary) 22%, transparent)",
+            boxShadow: "inset 0 -2px 0 0 var(--primary)",
+          }}
+        >
+          {highlightTerms(p, query)}
+        </mark>
+      );
+    }
+    return <span key={i}>{highlightTerms(p, query)}</span>;
+  });
+}
+
 function ResultDisplay({ result, query }: { result: Result; query: string }) {
   const matchRefs = useRef<Record<number, HTMLDetailsElement | null>>({});
   const [activeIdx, setActiveIdx] = useState<number | null>(null);
