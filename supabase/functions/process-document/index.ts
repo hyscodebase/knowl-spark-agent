@@ -166,10 +166,7 @@ Deno.serve(async (req) => {
     const chunks = cleanAndChunk(rawText);
     if (chunks.length === 0) throw new Error("문서에서 텍스트를 추출할 수 없습니다");
 
-    // 3) 임베딩 에이전트
-    const embeddings = await embeddingAgent(chunks);
-
-    // 기존 청크 제거 후 새로 삽입
+    // 기존 청크 제거 후 새로 삽입 (임베딩 없이 텍스트만 저장 — 키워드 검색)
     await supabase.from("document_chunks").delete().eq("document_id", documentId);
 
     const rows = chunks.map((content, i) => ({
@@ -177,7 +174,6 @@ Deno.serve(async (req) => {
       user_id: userId,
       chunk_index: i,
       content,
-      embedding: embeddings[i],
     }));
 
     // 배치 삽입 (한 번에 50개씩)
