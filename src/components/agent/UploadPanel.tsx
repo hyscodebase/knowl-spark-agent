@@ -80,10 +80,10 @@ export function UploadPanel({
       }
 
       const safeName = sanitizeStorageName(file.name);
-      const path = `${user.id}/${Date.now()}-${safeName}`;
+      const storagePath = `${user.id}/${Date.now()}-${safeName}`;
       const { error: upErr } = await supabase.storage
         .from("documents")
-        .upload(path, file);
+        .upload(storagePath, file);
       if (upErr) {
         toast.error(`${file.name} 업로드 실패`, { description: upErr.message });
         continue;
@@ -92,7 +92,7 @@ export function UploadPanel({
       const { error: insErr } = await supabase.from("documents").insert({
         user_id: user.id,
         file_name: file.name,
-        file_path: path,
+        file_path: storagePath,
         file_type: file.type || ext,
         file_size: file.size,
         location: `/documents/${user.id.slice(0, 8)}/`,
