@@ -69,7 +69,17 @@ async function extractKeywords(query: string, apiKey: string): Promise<string[]>
   try {
     const args = JSON.parse(toolCall.function.arguments);
     const kws = Array.isArray(args.keywords) ? args.keywords : [];
-    return kws.map((k: any) => String(k).trim()).filter((k: string) => k.length > 0);
+    // 모델이 가끔 ["A, B, C"] 처럼 한 문자열에 콤마로 묶어 반환 → 분리해서 평탄화
+    const flat: string[] = [];
+    for (const k of kws) {
+      const parts = String(k)
+        .split(/[,，、;\n]+/)
+        .map((p) => p.trim())
+        .filter((p) => p.length > 0);
+      flat.push(...parts);
+    }
+    // 중복 제거
+    return Array.from(new Set(flat));
   } catch {
     return query.split(/\s+/).filter((w) => w.length > 1).slice(0, 10);
   }
