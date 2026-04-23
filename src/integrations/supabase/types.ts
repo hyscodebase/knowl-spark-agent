@@ -135,14 +135,14 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      match_chunks: {
+      match_chunks_keyword: {
         Args: {
           date_from?: string
           date_to?: string
           file_types?: string[]
           filename_query?: string
           match_count?: number
-          query_embedding: string
+          search_terms: string[]
         }
         Returns: {
           chunk_index: number

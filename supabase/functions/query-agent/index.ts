@@ -10,7 +10,7 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type",
 };
 
-// ===== 에이전트 4: 시맨틱 검색 =====
+// ===== 에이전트 4: 키워드 추출 + 키워드 검색 + LLM 재랭킹 =====
 type SearchFilters = {
   fileTypes?: string[] | null;
   filenameQuery?: string | null;
@@ -18,7 +18,64 @@ type SearchFilters = {
   dateTo?: string | null;
 };
 
-async function semanticSearchAgent(
+// Gemini로 질문에서 검색용 핵심 키워드 추출
+async function extractKeywords(query: string, apiKey: string): Promise<string[]> {
+  const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: "google/gemini-2.5-flash-lite",
+      messages: [
+        {
+          role: "system",
+          content:
+            "사용자 질문에서 문서 검색에 쓸 핵심 키워드와 동의어를 추출하세요. 조사·접속사 제외. 명사·고유명사·전문용어 위주.",
+        },
+        { role: "user", content: query },
+      ],
+      tools: [{
+        type: "function",
+        function: {
+          name: "submit_keywords",
+          description: "검색용 키워드 목록 제출",
+          parameters: {
+            type: "object",
+            properties: {
+              keywords: {
+                type: "array",
+                items: { type: "string" },
+                description: "3~10개의 검색 키워드 (한국어/영어 모두 허용, 동의어 포함)",
+              },
+            },
+            required: ["keywords"],
+            additionalProperties: false,
+          },
+        },
+      }],
+      tool_choice: { type: "function", function: { name: "submit_keywords" } },
+    }),
+  });
+
+  if (!res.ok) {
+    if (res.status === 429) throw new Error("RATE_LIMIT");
+    if (res.status === 402) throw new Error("PAYMENT_REQUIRED");
+    // 키워드 추출 실패 시 단순 분리로 폴백
+    return query.split(/\s+/).filter((w) => w.length > 1).slice(0, 10);
+  }
+
+  const json = await res.json();
+  const toolCall = json.choices?.[0]?.message?.tool_calls?.[0];
+  if (!toolCall) return query.split(/\s+/).filter((w) => w.length > 1).slice(0, 10);
+  try {
+    const args = JSON.parse(toolCall.function.arguments);
+    const kws = Array.isArray(args.keywords) ? args.keywords : [];
+    return kws.map((k: any) => String(k).trim()).filter((k: string) => k.length > 0);
+  } catch {
+    return query.split(/\s+/).filter((w) => w.length > 1).slice(0, 10);
+  }
+}
+
+async function searchAgent(
   supabase: any,
   query: string,
   topK: number,
@@ -27,40 +84,113 @@ async function semanticSearchAgent(
   const apiKey = Deno.env.get("LOVABLE_API_KEY");
   if (!apiKey) throw new Error("LOVABLE_API_KEY가 설정되지 않았습니다");
 
-  // 쿼리 임베딩
-  const embedRes = await fetch("https://ai.gateway.lovable.dev/v1/embeddings", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: "google/text-embedding-004",
-      input: query,
-    }),
-  });
+  // 1) 질문에서 검색 키워드 추출
+  const keywords = await extractKeywords(query, apiKey);
+  console.log("Extracted keywords:", keywords);
 
-  if (!embedRes.ok) {
-    if (embedRes.status === 429) throw new Error("RATE_LIMIT");
-    if (embedRes.status === 402) throw new Error("PAYMENT_REQUIRED");
-    throw new Error(`쿼리 임베딩 실패: ${await embedRes.text()}`);
-  }
-  const embedJson = await embedRes.json();
-  const queryVec = embedJson.data?.[0]?.embedding;
-  if (!queryVec) throw new Error("쿼리 임베딩이 비어있습니다");
-
-  // pgvector 검색 (RPC, RLS 적용 — auth.uid() 기반)
+  // 2) 키워드 매칭으로 후보 청크 검색 (topK*4 ~ 최대 30개 가져와 재랭킹)
+  const candidateLimit = Math.min(30, Math.max(topK * 4, 15));
   const fileTypes = (filters.fileTypes ?? []).filter(Boolean);
-  const { data: matches, error } = await supabase.rpc("match_chunks", {
-    query_embedding: queryVec,
-    match_count: topK,
+  const { data: matches, error } = await supabase.rpc("match_chunks_keyword", {
+    search_terms: keywords,
+    match_count: candidateLimit,
     file_types: fileTypes.length > 0 ? fileTypes : null,
     filename_query: filters.filenameQuery?.trim() || null,
     date_from: filters.dateFrom || null,
     date_to: filters.dateTo || null,
   });
-  if (error) throw new Error(`벡터 검색 실패: ${error.message}`);
-  return matches || [];
+  if (error) throw new Error(`검색 실패: ${error.message}`);
+
+  const candidates = matches || [];
+  if (candidates.length === 0) return [];
+  if (candidates.length <= topK) return candidates;
+
+  // 3) Gemini로 재랭킹 — 질문에 가장 관련 깊은 청크 topK 선택
+  const reranked = await rerankWithLLM(query, candidates, topK, apiKey);
+  return reranked;
+}
+
+async function rerankWithLLM(
+  query: string,
+  candidates: Array<{ id: string; content: string; file_name: string; similarity: number }>,
+  topK: number,
+  apiKey: string,
+): Promise<any[]> {
+  const numbered = candidates
+    .map((c, i) => `[#${i + 1}] (${c.file_name})\n${c.content.slice(0, 500)}`)
+    .join("\n\n---\n\n");
+
+  const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: "google/gemini-2.5-flash",
+      messages: [
+        {
+          role: "system",
+          content:
+            "주어진 질문에 가장 관련 깊은 청크들을 선택하고 관련도 점수(0~1)를 매기세요. 표면적 키워드 매칭이 아닌 의미적 관련성으로 판단하세요.",
+        },
+        {
+          role: "user",
+          content: `질문: ${query}\n\n후보 청크 ${candidates.length}개:\n\n${numbered}\n\n위 중에서 가장 관련 깊은 청크를 최대 ${topK}개 선택해 점수를 매기세요.`,
+        },
+      ],
+      tools: [{
+        type: "function",
+        function: {
+          name: "submit_ranking",
+          description: "관련도 순위 제출",
+          parameters: {
+            type: "object",
+            properties: {
+              rankings: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    chunk_index: { type: "integer", description: "청크 번호 (1부터)" },
+                    score: { type: "number", description: "관련도 0~1" },
+                  },
+                  required: ["chunk_index", "score"],
+                  additionalProperties: false,
+                },
+              },
+            },
+            required: ["rankings"],
+            additionalProperties: false,
+          },
+        },
+      }],
+      tool_choice: { type: "function", function: { name: "submit_ranking" } },
+    }),
+  });
+
+  if (!res.ok) {
+    if (res.status === 429) throw new Error("RATE_LIMIT");
+    if (res.status === 402) throw new Error("PAYMENT_REQUIRED");
+    // 재랭킹 실패 시 키워드 점수 기반 상위 topK 반환
+    return candidates.slice(0, topK);
+  }
+
+  const json = await res.json();
+  const toolCall = json.choices?.[0]?.message?.tool_calls?.[0];
+  if (!toolCall) return candidates.slice(0, topK);
+
+  try {
+    const args = JSON.parse(toolCall.function.arguments);
+    const rankings = (args.rankings || [])
+      .filter((r: any) => Number.isFinite(r.chunk_index) && r.chunk_index >= 1 && r.chunk_index <= candidates.length)
+      .sort((a: any, b: any) => (b.score || 0) - (a.score || 0))
+      .slice(0, topK);
+
+    return rankings.map((r: any) => ({
+      ...candidates[r.chunk_index - 1],
+      similarity: Math.max(0, Math.min(1, Number(r.score) || candidates[r.chunk_index - 1].similarity)),
+    }));
+  } catch {
+    return candidates.slice(0, topK);
+  }
 }
 
 // ===== 에이전트 5: 답변 & 요약 (마스터 에이전트) =====
@@ -253,8 +383,8 @@ Deno.serve(async (req) => {
     if (query.length > 1000) throw new Error("질문은 1000자 이하여야 합니다");
     const k = Math.max(1, Math.min(20, Number(topK) || 5));
 
-    // 4) 시맨틱 검색 (필터 적용)
-    const matches = await semanticSearchAgent(supabase, query, k, {
+    // 4) 키워드 검색 + LLM 재랭킹 (필터 적용)
+    const matches = await searchAgent(supabase, query, k, {
       fileTypes: Array.isArray(filters.fileTypes) ? filters.fileTypes : null,
       filenameQuery: typeof filters.filenameQuery === "string" ? filters.filenameQuery : null,
       dateFrom: typeof filters.dateFrom === "string" ? filters.dateFrom : null,
