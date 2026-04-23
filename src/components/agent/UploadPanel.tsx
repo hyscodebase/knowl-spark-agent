@@ -29,6 +29,24 @@ type DocRow = {
 const ALLOWED = ["pdf", "docx", "txt", "pptx"];
 const MAX_SIZE = 25 * 1024 * 1024; // 25MB
 
+// Supabase Storage keys only allow ASCII alphanumerics, `/`, `.`, `_`, `-`.
+// Korean characters, spaces, parentheses, etc. produce InvalidKey errors,
+// so we sanitize the storage path while preserving the original file name in DB.
+function sanitizeStorageName(name: string): string {
+  const dotIdx = name.lastIndexOf(".");
+  const base = dotIdx > 0 ? name.slice(0, dotIdx) : name;
+  const ext = dotIdx > 0 ? name.slice(dotIdx + 1).toLowerCase() : "";
+  const safeBase =
+    base
+      .normalize("NFKD")
+      .replace(/[^\w.-]+/g, "_")
+      .replace(/_+/g, "_")
+      .replace(/^_+|_+$/g, "")
+      .slice(0, 60) || "file";
+  const safeExt = ext.replace(/[^a-z0-9]/g, "");
+  return safeExt ? `${safeBase}.${safeExt}` : safeBase;
+}
+
 export function UploadPanel({
   documents,
   onChange,
@@ -62,6 +80,8 @@ export function UploadPanel({
       }
 
       const path = `${user.id}/${Date.now()}-${file.name}`;
+      const safeName = sanitizeStorageName(file.name);
+      const path = `${user.id}/${Date.now()}-${safeName}`;
       const { error: upErr } = await supabase.storage
         .from("documents")
         .upload(path, file);
