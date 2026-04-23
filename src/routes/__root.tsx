@@ -38,7 +38,7 @@ export const Route = createRootRoute({
           "PDF, DOCX, PPTX, TXT 문서를 업로드하고 멀티 에이전트 RAG 파이프라인으로 의미 기반 검색과 근거 있는 답변을 받으세요.",
       },
       { name: "author", content: "Smart Knowledge Agent" },
-      { property: "og:title", content: "Smart Local Knowledge Agent" },
+      { property: "og:title", content: "Smart Local Knowledge Agent | 로컬 문서 지식 에이전트" },
       {
         property: "og:description",
         content: "로컬 문서를 위한 멀티 에이전트 RAG 시스템.",
@@ -46,6 +46,12 @@ export const Route = createRootRoute({
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
       { name: "twitter:site", content: "@Lovable" },
+      { name: "twitter:title", content: "Smart Local Knowledge Agent | 로컬 문서 지식 에이전트" },
+      { name: "description", content: "AI 에이전트가 로컬 문서를 이해하고 의미론적 검색 및 요약 기능을 제공합니다." },
+      { property: "og:description", content: "AI 에이전트가 로컬 문서를 이해하고 의미론적 검색 및 요약 기능을 제공합니다." },
+      { name: "twitter:description", content: "AI 에이전트가 로컬 문서를 이해하고 의미론적 검색 및 요약 기능을 제공합니다." },
+      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/f1ae2b3a-ecbc-4628-ae38-88b9389c0936/id-preview-c51b6dfb--3ed644a9-34e5-4689-9710-5560584a24d3.lovable.app-1776833562425.png" },
+      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/f1ae2b3a-ecbc-4628-ae38-88b9389c0936/id-preview-c51b6dfb--3ed644a9-34e5-4689-9710-5560584a24d3.lovable.app-1776833562425.png" },
     ],
     links: [
       {
