@@ -102,40 +102,7 @@ function cleanAndChunk(raw: string, chunkSize = 1000, overlap = 150): string[] {
   return chunks.filter((c) => c.length > 20);
 }
 
-// ===== 에이전트 3: 임베딩 에이전트 =====
-async function embeddingAgent(texts: string[]): Promise<number[][]> {
-  const apiKey = Deno.env.get("LOVABLE_API_KEY");
-  if (!apiKey) throw new Error("LOVABLE_API_KEY가 설정되지 않았습니다");
-
-  const embeddings: number[][] = [];
-  // 한 번에 하나씩 (게이트웨이 호환성)
-  for (const text of texts) {
-    const res = await fetch("https://ai.gateway.lovable.dev/v1/embeddings", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/text-embedding-004",
-        input: text,
-      }),
-    });
-
-    if (!res.ok) {
-      const errText = await res.text();
-      if (res.status === 429) throw new Error("RATE_LIMIT");
-      if (res.status === 402) throw new Error("PAYMENT_REQUIRED");
-      throw new Error(`임베딩 생성 실패 (${res.status}): ${errText}`);
-    }
-
-    const json = await res.json();
-    const vec = json.data?.[0]?.embedding;
-    if (!vec) throw new Error("임베딩 응답이 비어있습니다");
-    embeddings.push(vec);
-  }
-  return embeddings;
-}
+// 임베딩 단계 제거 — 키워드 기반 검색으로 전환됨
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
