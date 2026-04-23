@@ -79,7 +79,6 @@ export function UploadPanel({
         continue;
       }
 
-      const path = `${user.id}/${Date.now()}-${file.name}`;
       const safeName = sanitizeStorageName(file.name);
       const path = `${user.id}/${Date.now()}-${safeName}`;
       const { error: upErr } = await supabase.storage
