@@ -383,8 +383,8 @@ Deno.serve(async (req) => {
     if (query.length > 1000) throw new Error("질문은 1000자 이하여야 합니다");
     const k = Math.max(1, Math.min(20, Number(topK) || 5));
 
-    // 4) 시맨틱 검색 (필터 적용)
-    const matches = await semanticSearchAgent(supabase, query, k, {
+    // 4) 키워드 검색 + LLM 재랭킹 (필터 적용)
+    const matches = await searchAgent(supabase, query, k, {
       fileTypes: Array.isArray(filters.fileTypes) ? filters.fileTypes : null,
       filenameQuery: typeof filters.filenameQuery === "string" ? filters.filenameQuery : null,
       dateFrom: typeof filters.dateFrom === "string" ? filters.dateFrom : null,
