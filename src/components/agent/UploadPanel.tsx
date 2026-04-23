@@ -40,6 +40,8 @@ export function UploadPanel({
   const fileInput = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [indexingId, setIndexingId] = useState<string | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const dragCounter = useRef(0);
 
   const handleFiles = async (files: FileList | null) => {
     if (!files || !user) return;
@@ -148,11 +150,55 @@ export function UploadPanel({
 
       <label
         htmlFor="file-upload"
-        className="flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-border bg-secondary/40 px-6 py-10 text-center transition hover:border-primary/40 hover:bg-secondary"
+        onDragEnter={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          dragCounter.current += 1;
+          if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
+            setIsDragging(true);
+          }
+        }}
+        onDragLeave={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          dragCounter.current -= 1;
+          if (dragCounter.current <= 0) {
+            dragCounter.current = 0;
+            setIsDragging(false);
+          }
+        }}
+        onDragOver={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          e.dataTransfer.dropEffect = "copy";
+        }}
+        onDrop={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          dragCounter.current = 0;
+          setIsDragging(false);
+          if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+            handleFiles(e.dataTransfer.files);
+            e.dataTransfer.clearData();
+          }
+        }}
+        className={`flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed px-6 py-10 text-center transition ${
+          isDragging
+            ? "border-primary bg-primary/5 scale-[1.01]"
+            : "border-border bg-secondary/40 hover:border-primary/40 hover:bg-secondary"
+        }`}
       >
-        <Upload className="mb-2 h-6 w-6 text-muted-foreground" />
+        <Upload
+          className={`mb-2 h-6 w-6 transition-colors ${
+            isDragging ? "text-primary" : "text-muted-foreground"
+          }`}
+        />
         <span className="text-sm font-medium">
-          {uploading ? "업로드 중..." : "파일을 선택하거나 끌어다 놓으세요"}
+          {uploading
+            ? "업로드 중..."
+            : isDragging
+              ? "여기에 파일을 놓으세요"
+              : "파일을 선택하거나 끌어다 놓으세요"}
         </span>
         <span className="mt-1 text-xs text-muted-foreground">
           여러 파일을 한 번에 업로드할 수 있습니다
