@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "project": "knowl-spark-agent",
+  "repository": "hyscodebase/knowl-spark-agent",
+  "curation_version": 1,
+  "curated_at": "2026-10-25T23:20:00Z",
+  "baseline_commit": "b1d3e94bcd7f50d5e2de3ade4d1de7ea58bcafdf",
+  "scope": "Historical personal UI design, not implemented features or raw conversation backup",
+  "sources": [
+    {
+      "conversation_id": "6a007fa9-7d88-83e9-98e6-f9b782e5372e",
+      "message_id": "9b2a87bd-3df4-4294-8a03-287d2e401714",
+      "updated_at": "2026-05-10T13:07:03.372388Z",
+      "url": "https://chatgpt.com/c/6a007fa9-7d88-83e9-98e6-f9b782e5372e?messageId=9b2a87bd-3df4-4294-8a03-287d2e401714",
+      "read_coverage": "Complete response, 13738 characters, two reader pages; not complete conversation"
+    },
+    {
+      "conversation_id": "6a007fa9-7d88-83e9-98e6-f9b782e5372e",
+      "message_id": "e081e653-c5d7-4ecb-b93b-3710adf6fe24",
+      "url": "https://chatgpt.com/c/6a007fa9-7d88-83e9-98e6-f9b782e5372e?messageId=e081e653-c5d7-4ecb-b93b-3710adf6fe24",
+      "read_coverage": "User request read; attached ZIP not recovered"
+    }
+  ],
+  "source_repository_blobs": {
+    "README.md": "626fc0ae8b787ae29b934d047a2be8db986e3e81",
+    "supabase/functions/query-agent/index.ts": "2f5bbbb77d92e39be40abd49f174875ab7b4e02a"
+  },
+  "files": [
+    {
+      "path": "curated-chat/CHANGELOG.md",
+      "sha256": "9c8648afa6578b2272b4e9f062b3c7df6e39ca51eebdc90ac254af0993840595",
+      "bytes": 379,
+      "validation": "source-reviewed; document-only; runtime-not-tested"
+    },
+    {
+      "path": "curated-chat/README.md",
+      "sha256": "a2c03a56113b86fdeec5f18a8ed6c8834bd7bb0311dfd102dc1598640a87ba6f",
+      "bytes": 616,
+      "validation": "source-reviewed; document-only; runtime-not-tested"
+    },
+    {
+      "path": "curated-chat/design/ui-workflow-proposal.md",
+      "sha256": "c27981c3ea8ef885dacfe09eaef644971465fe19988709062d8fa18acd70d3b7",
+      "bytes": 5865,
+      "validation": "source-reviewed; document-only; runtime-not-tested"
+    },
+    {
+      "path": "curated-chat/runs/2026-10-26.md",
+      "sha256": "afa4a20d55dd4cb97f451f762f2d3874aea86cb108108cfe3289b60f8a2f1abe",
+      "bytes": 2818,
+      "validation": "source-reviewed; document-only; runtime-not-tested"
+    }
+  ],
+  "coverage_report": "curated-chat/runs/2026-10-26.md",
+  "deduplication": "No curated-chat entries existed in baseline tree; proposed routes absent; existing code and root README preserved",
+  "verification": {
+    "document_links_checked": true,
+    "content_reviewed": true,
+    "application_tests": "not run; no application change",
+    "self_hash": "Excluded to avoid circularity; verify via Git blob and commit readback"
+  }
+}
